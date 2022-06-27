@@ -17,18 +17,18 @@ std::unordered_map<std::string, File> ISO9660::list(Inode inode) {
 	if(npages == 0)
 		return {}; // Sad
 
-	uint8_t* aux = new uint8_t[npages * 4096];
-	memcpy(aux, buffer, 4096);
-	uint8_t* cur = aux + 4096;
+	uint8_t* aux = new uint8_t[npages * PAGE_SIZE];
+	memcpy(aux, buffer, PAGE_SIZE);
+	uint8_t* cur = aux + PAGE_SIZE;
 
 	// Copy the rest
 	for(size_t i=1; i<npages; ++i) {
 		std::rpc(pid, std::ISO9660::LIST, inode, i);
-		memcpy(cur, buffer, 4096);
-		cur += 4096;
+		memcpy(cur, buffer, PAGE_SIZE);
+		cur += PAGE_SIZE;
 	}
 	// Got it
-	uint8_t* absoluteLimit = aux + npages * 4096;
+	uint8_t* absoluteLimit = aux + npages * PAGE_SIZE;
 
 	std::unordered_map<std::string, File> ret;
 
