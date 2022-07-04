@@ -79,10 +79,7 @@ bool pubList(std::PID client, size_t page) {
 	return true;
 }
 
-/*bool pubRead(std::PID client, size_t sz) {
-	if(sz > PAGE_SIZE)
-		return false;
-
+bool pubRead(std::PID client, size_t page) {
 	uint8_t* data = std::sm::get(client);
 	if(!data)
 		return false;
@@ -97,14 +94,14 @@ bool pubList(std::PID client, size_t page) {
 
 	// TODO: check permissions
 
-	return true;
-}*/
+	return read(sel.f, sel.s, data, page);
+}
 
 void publish() {
 	std::exportProcedure((void*)connect, 1);
 	std::exportProcedure((void*)select, 1);
 	std::exportProcedure((void*)pubList, 1);
-	//std::exportProcedure((void*)pubRead, 2);
+	std::exportProcedure((void*)pubRead, 1);
 	// Write, makeFile, makeDir
 	std::enableRPC();
 	std::publish("VFS");
