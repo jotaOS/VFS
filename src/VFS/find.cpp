@@ -1,32 +1,33 @@
 #include <common.hpp>
 #include <unordered_set>
 #include <fss/ISO9660/ISO9660.hpp>
+#include <fss/StrifeFS/StrifeFS.hpp>
 #include "VFS.hpp"
+#include <set>
 
 std::pair<Mountpoint, File> find(const std::string& origpath) {
 	std::string path = simplify(origpath);
 
-	// Look through all mountpoints, find best match in a greedy-like way
-	std::unordered_set<std::string> candidates;
-	for(auto const& x : mounts)
-		candidates.add(x.f);
-
-	size_t counter = 0;
-	while(candidates.size() != 1) {
-		std::unordered_set<std::string> nextCandidates;
-		for(auto const& x : candidates) {
-			if(counter < x.size() && path[counter] == x[counter]) {
-				// Looking good so far
-				nextCandidates.add(x);
-			}
+	// Look through all mountpoints, find best match
+	std::string mpPath;
+	Mountpoint mp = 0;
+	size_t highestScore = 0;
+	std::set<std::pair<size_t, Mountpoint>> mps;
+	for(auto const& x : mounts) {
+		size_t score = 0;
+		while(score < path.size() && score < x.f.size()) {
+			if(path[score] == x.f[score])
+				++score;
+			else
+				break;
 		}
 
-		candidates = std::move(nextCandidates);
-		++counter; // Another character checked
+		if(score > highestScore && score == x.f.size()) {
+			mpPath = x.f;
+			mp = x.s;
+			highestScore = score;
+		}
 	}
-
-	std::string mpPath = *(candidates.begin());
-	Mountpoint mp = mounts[mpPath];
 
 	// Now that we got the mountpoint, what's the inode?
 	// Remove mpPath from path
@@ -39,6 +40,9 @@ std::pair<Mountpoint, File> find(const std::string& origpath) {
 	switch(fstypes[mp]) {
 	case FSTypes::ISO9660:
 		file = ((ISO9660*)(mountpoints[mp]))->find(fsPath);
+		break;
+	case FSTypes::STRIFEFS:
+		file = ((StrifeFS*)(mountpoints[mp]))->find(fsPath);
 		break;
 	}
 

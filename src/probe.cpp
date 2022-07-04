@@ -3,7 +3,7 @@
 #include <common.hpp>
 #include <shared_memory>
 
-std::vector<std::UUID> probe() {
+std::unordered_map<size_t, std::vector<std::UUID>> probe() {
 	std::PID block = std::resolve("block");
 	if(!block) {
 		std::printf("[VFS] Could not resolve for block.\n");
@@ -18,7 +18,7 @@ std::vector<std::UUID> probe() {
 		std::exit(2);
 	}
 
-	std::vector<std::UUID> ret;
+	std::unordered_map<size_t, std::vector<std::UUID>> ret;
 
 	size_t page=0;
 	while(true) {
@@ -33,7 +33,9 @@ std::vector<std::UUID> probe() {
 			std::UUID uuid;
 			uuid.a = *(buffer++);
 			uuid.b = *(buffer++);
-			ret.push_back(uuid);
+
+			auto type = *(buffer++);
+			ret[type].push_back(uuid);
 		}
 
 		++page;

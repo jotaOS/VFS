@@ -1,6 +1,6 @@
-#include "ISO9660.hpp"
+#include "StrifeFS.hpp"
 
-File ISO9660::find(const std::string& path) {
+File StrifeFS::find(const std::string& path) {
 	Inode parent = root;
 	File current;
 

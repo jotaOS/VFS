@@ -5,11 +5,12 @@
 #include <unordered_map>
 #include <string>
 
-std::vector<std::UUID> probe();
+std::unordered_map<size_t, std::vector<std::UUID>> probe();
 
 struct FSTypes {
 	enum {
 		ISO9660,
+		STRIFEFS,
 	};
 };
 
@@ -21,5 +22,7 @@ extern std::vector<void*> mountpoints;
 extern std::vector<size_t> fstypes;
 // Resolving names to mountpoints
 extern std::unordered_map<std::string, Mountpoint> mounts;
+
+void publish();
 
 #endif

@@ -51,5 +51,6 @@ std::unordered_map<std::string, File> ISO9660::list(Inode inode) {
 		cur += mf->namesz + 1;
 	}
 
+	delete [] aux;
 	return ret;
 }
