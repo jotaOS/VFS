@@ -11,9 +11,9 @@ bool connect(std::PID client, std::SMID smid) {
 	return std::sm::connect(client, smid);
 }
 
-typedef std::pair<Mountpoint, Inode> Mpi; // Mountpoint + Inode
+typedef std::pair<Mountpoint, File> Mpf; // Mountpoint + Inode
 
-std::unordered_map<std::PID, Mpi> selected;
+std::unordered_map<std::PID, Mpf> selected;
 std::mutex selectedLock;
 size_t select(std::PID client, size_t sz) {
 	if(sz >= PAGE_SIZE)
@@ -36,7 +36,7 @@ size_t select(std::PID client, size_t sz) {
 		return std::VFS::SELECT_NOT_FOUND;
 
 	selectedLock.acquire();
-	selected[client] = {mp, i};
+	selected[client] = {mp, found.s};
 	selectedLock.release();
 	return std::VFS::SELECT_OK;
 }
@@ -55,10 +55,10 @@ bool pubList(std::PID client, size_t page) {
 	selectedLock.release();
 
 	FileList files;
-	if(!list(sel.f, sel.s, files))
+	if(!list(sel.f, sel.s.inode, files))
 		return false;
 
-	auto ret = marshalledList(sel.f, sel.s);
+	auto ret = marshalledList(sel.f, sel.s.inode);
 	if(!ret.f)
 		return false;
 
@@ -94,7 +94,29 @@ bool pubRead(std::PID client, size_t page) {
 
 	// TODO: check permissions
 
-	return read(sel.f, sel.s, data, page);
+	return read(sel.f, sel.s.inode, data, page);
+}
+
+bool pubInfo(std::PID client) {
+	uint8_t* data = std::sm::get(client);
+	if(!data)
+		return false;
+
+	selectedLock.acquire();
+	if(!selected.has(client)) {
+		selectedLock.release();
+		return false;
+	}
+	auto sel = selected[client];
+	selectedLock.release();
+
+	// TODO: check permissions
+
+	std::VFS::Info info;
+	info.size = sel.s.size;
+	info.isDirectory = sel.s.isDirectory;
+	memcpy(data, &info, sizeof(info));
+	return true;
 }
 
 void publish() {
@@ -102,6 +124,7 @@ void publish() {
 	std::exportProcedure((void*)select, 1);
 	std::exportProcedure((void*)pubList, 1);
 	std::exportProcedure((void*)pubRead, 1);
+	std::exportProcedure((void*)pubInfo, 0);
 	// Write, makeFile, makeDir
 	std::enableRPC();
 	std::publish("VFS");
