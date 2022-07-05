@@ -12,6 +12,9 @@ File ISO9660::find(const std::string& path) {
 	auto filename = splitted.back();
 	splitted.pop_back();
 
+	if(!filename.size())
+		filename = "."; // Hack for directories
+
 	// Check the directories
 	for(auto const& x : splitted) {
 		current = list(parent)[x];

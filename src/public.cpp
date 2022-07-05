@@ -47,7 +47,7 @@ bool pubList(std::PID client, size_t page) {
 		return false;
 
 	selectedLock.acquire();
-	if(selected.find(client) == selected.end()) {
+	if(!selected.has(client)) {
 		selectedLock.release();
 		return false;
 	}
@@ -85,7 +85,7 @@ bool pubRead(std::PID client, size_t page) {
 		return false;
 
 	selectedLock.acquire();
-	if(selected.find(client) == selected.end()) {
+	if(!selected.has(client)) {
 		selectedLock.release();
 		return false;
 	}
