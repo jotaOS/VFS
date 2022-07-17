@@ -21,8 +21,6 @@ private:
 	};
 
 	std::PID pid = 0;
-	std::SMID smid = 0;
-	uint8_t* buffer = nullptr;
 	Inode root = 0;
 
 public:
@@ -31,7 +29,7 @@ public:
 
 	inline Inode getRoot() const { return root; }
 	std::unordered_map<std::string, File> list(Inode inode);
-	size_t read(Inode inode, uint8_t* data, size_t page);
+	bool read(Inode inode, uint8_t* data, size_t page);
 
 	File find(const std::string& path);
 };

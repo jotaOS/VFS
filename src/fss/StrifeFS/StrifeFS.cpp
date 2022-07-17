@@ -16,13 +16,8 @@ StrifeFS::StrifeFS(std::UUID uuid, bool bootstrapping, bool format) {
 	}
 
 	// Set up
-	if(!std::rpc(pid, std::StrifeFS::SETUP, uuid.a, uuid.b, format))
+	if(!std::rpc(pid, std::StrifeFS::SETUP, uuid.a, uuid.b, format)) {
 		std::printf("[VFS] Could not set up StrifeFS.\n");
-
-	// Shared memory
-	smid = std::smMake();
-	buffer = (uint8_t*)std::smMap(smid);
-	std::smAllow(smid, pid);
-	if(!std::rpc(pid, std::StrifeFS::CONNECT, smid))
-		std::printf("[VFS] Could not connect with StrifeFS.\n");
+		std::exit(77);
+	}
 }

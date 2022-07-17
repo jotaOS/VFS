@@ -2,33 +2,40 @@
 #include <userspace/StrifeFS.hpp>
 #include <cstdio>
 #include "structures.hpp"
+#include <shared_memory>
 
 std::unordered_map<std::string, File> StrifeFS::list(Inode inode) {
-	if(!std::rpc(pid, std::StrifeFS::GET_INODE, inode))
+	std::SMID smid = std::smMake();
+	uint8_t* buffer = (uint8_t*)std::smMap(smid);
+	std::smAllow(smid, pid);
+
+	if(!std::rpc(pid, std::StrifeFS::GET_INODE, inode)) {
+		std::munmap(buffer);
+		std::smDrop(smid);
 		return {};
+	}
 
 	auto* theInode = (SStructs::Inode*)buffer;
 	size_t sz = theInode->size;
-	uint8_t* aux = new uint8_t[sz];
+	size_t npages = (sz + PAGE_SIZE - 1) / PAGE_SIZE;
 
-	// Start asking for pages
-	size_t start = 0;
-	size_t remaining = sz;
-	uint8_t* cur = aux;
-	while(remaining) {
-		size_t copy = std::min(remaining, (size_t)PAGE_SIZE);
-		if(!std::rpc(pid, std::StrifeFS::READ, inode, start, copy)) {
-			delete [] aux;
-			return {};
-		}
-		memcpy(cur, buffer, copy);
-		start += copy; cur += copy; remaining -= copy;
+	std::munmap(buffer);
+	std::smDrop(smid);
+
+	smid = std::smMake(npages);
+	buffer = (uint8_t*)std::smMap(smid);
+	std::smAllow(smid, pid);
+
+	if(!std::rpc(pid, std::StrifeFS::READ, inode, 0, sz)) {
+		std::munmap(buffer, npages);
+		std::smDrop(smid);
+		return {};
 	}
 
 	std::unordered_map<std::string, File> ret;
 
-	cur = aux;
-	remaining = sz;
+	uint8_t* cur = buffer;
+	size_t remaining = sz;
 	while(remaining) {
 		auto i = *(SStructs::Inodei*)cur;
 		uint64_t namesz = *(uint64_t*)(cur + sizeof(SStructs::Inodei));
@@ -42,10 +49,16 @@ std::unordered_map<std::string, File> StrifeFS::list(Inode inode) {
 		delete [] tmp;
 		cur += namesz; remaining -= namesz;
 
-		if(!std::rpc(pid, std::StrifeFS::GET_INODE, i))
+		std::SMID ismid = std::smMake();
+		uint8_t* ibuffer = (uint8_t*)std::smMap(ismid);
+		std::smAllow(ismid, pid);
+		if(!std::rpc(pid, std::StrifeFS::GET_INODE, ismid, i)) {
+			std::munmap(ibuffer);
+			std::smDrop(ismid);
 			continue;
+		}
 
-		auto* thing = (SStructs::Inode*)buffer;
+		auto* thing = (SStructs::Inode*)ibuffer;
 
 		File f;
 		f.parent = inode;
@@ -55,8 +68,12 @@ std::unordered_map<std::string, File> StrifeFS::list(Inode inode) {
 			f.isDirectory = true;
 
 		ret[name] = f;
+
+		std::munmap(ibuffer);
+		std::smDrop(ismid);
 	}
 
-	delete [] aux;
+	std::munmap(buffer, npages);
+	std::smDrop(smid);
 	return ret;
 }

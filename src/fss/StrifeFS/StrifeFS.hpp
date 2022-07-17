@@ -9,8 +9,6 @@
 class StrifeFS {
 private:
 	std::PID pid = 0;
-	std::SMID smid = 0;
-	uint8_t* buffer = nullptr;
 	static const Inode root = 1;
 
 public:

@@ -1,6 +1,7 @@
 #include "ISO9660.hpp"
 #include <userspace/ISO9660.hpp>
 #include <cstdio>
+#include <shared_memory>
 
 // This in the marshalled return of list
 struct MarshalledFile {
@@ -12,27 +13,27 @@ struct MarshalledFile {
 } __attribute__((packed));
 
 std::unordered_map<std::string, File> ISO9660::list(Inode inode) {
-	// Get how many pages, and the first one
-	size_t npages = std::rpc(pid, std::ISO9660::LIST, inode, 0);
+	// How many pages?
+	size_t npages = std::rpc(pid, std::ISO9660::LIST_SIZE, inode);
 	if(npages == 0)
 		return {}; // Sad
 
-	uint8_t* aux = new uint8_t[npages * PAGE_SIZE];
-	memcpy(aux, buffer, PAGE_SIZE);
-	uint8_t* cur = aux + PAGE_SIZE;
+	std::SMID smid = std::smMake(npages);
+	uint8_t* buffer = (uint8_t*)std::smMap(smid);
+	std::smAllow(smid, pid);
 
-	// Copy the rest
-	for(size_t i=1; i<npages; ++i) {
-		std::rpc(pid, std::ISO9660::LIST, inode, i);
-		memcpy(cur, buffer, PAGE_SIZE);
-		cur += PAGE_SIZE;
+	bool result = std::rpc(pid, std::ISO9660::LIST, smid, inode);
+	if(!result) {
+		std::munmap(buffer, npages);
+		std::smDrop(smid);
+		return {};
 	}
-	// Got it
-	uint8_t* absoluteLimit = aux + npages * PAGE_SIZE;
 
+	// Got it
+	uint8_t* absoluteLimit = buffer + npages * PAGE_SIZE;
 	std::unordered_map<std::string, File> ret;
 
-	cur = aux;
+	uint8_t* cur = buffer;
 	while(cur < absoluteLimit) {
 		auto* mf = (MarshalledFile*)cur;
 		char* name = (char*)cur + sizeof(MarshalledFile);
@@ -51,6 +52,7 @@ std::unordered_map<std::string, File> ISO9660::list(Inode inode) {
 		cur += mf->namesz + 1;
 	}
 
-	delete [] aux;
+	std::munmap(buffer, npages);
+	std::smDrop(smid);
 	return ret;
 }

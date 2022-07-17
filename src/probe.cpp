@@ -6,17 +6,13 @@
 std::unordered_map<size_t, std::vector<std::UUID>> probe() {
 	std::PID block = std::resolve("block");
 	if(!block) {
-		std::printf("[VFS] Could not resolve for block.\n");
+		std::printf("[VFS] Could not resolve block.\n");
 		std::exit(1);
 	}
 
 	std::SMID smid = std::smMake();
 	uint64_t* buffer = (uint64_t*)std::smMap(smid);
 	std::smAllow(smid, block);
-	if(!std::rpc(block, std::block::CONNECT, smid)) {
-		std::printf("[VFS] Could not share memory with block.\n");
-		std::exit(2);
-	}
 
 	std::unordered_map<size_t, std::vector<std::UUID>> ret;
 
@@ -24,6 +20,7 @@ std::unordered_map<size_t, std::vector<std::UUID>> probe() {
 	while(true) {
 		size_t n = std::rpc(block,
 							std::block::LIST_DEVICES,
+							smid,
 							page);
 
 		if(n == 0)
@@ -41,7 +38,7 @@ std::unordered_map<size_t, std::vector<std::UUID>> probe() {
 		++page;
 	}
 
-	// TODO: free smid, disconnect maybe?
-
+	std::munmap(buffer);
+	std::smDrop(smid);
 	return ret;
 }

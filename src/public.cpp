@@ -7,23 +7,27 @@
 #include <rpc>
 #include <userspace/VFS.hpp>
 
-bool connect(std::PID client, std::SMID smid) {
-	return std::sm::connect(client, smid);
-}
-
 typedef std::pair<Mountpoint, File> Mpf; // Mountpoint + Inode
 
 std::unordered_map<std::PID, Mpf> selected;
 std::mutex selectedLock;
-size_t select(std::PID client, size_t sz) {
+size_t select(std::PID client, std::SMID smid, size_t sz) {
 	if(sz >= PAGE_SIZE)
 		return std::VFS::SELECT_CONNECT_ERROR;
 
-	uint8_t* data = std::sm::get(client);
-	if(!data)
+	auto link = std::sm::link(client, smid);
+	size_t npages = link.s;
+	if(!npages)
 		return std::VFS::SELECT_CONNECT_ERROR;
-	data[sz] = 0;
-	std::string name((char*)data);
+	uint8_t* buffer = link.f;
+
+	if(sz >= npages * PAGE_SIZE) {
+		std::sm::unlink(smid);
+		return std::VFS::SELECT_CONNECT_ERROR;
+	}
+	buffer[sz] = 0;
+	std::string name((char*)buffer);
+	std::sm::unlink(smid);
 
 	auto found = find(name);
 	auto mp = found.f;
@@ -41,11 +45,7 @@ size_t select(std::PID client, size_t sz) {
 	return std::VFS::SELECT_OK;
 }
 
-bool pubList(std::PID client, size_t page) {
-	uint8_t* data = std::sm::get(client);
-	if(!data)
-		return false;
-
+size_t pubListSize(std::PID client) {
 	selectedLock.acquire();
 	if(!selected.has(client)) {
 		selectedLock.release();
@@ -62,31 +62,55 @@ bool pubList(std::PID client, size_t page) {
 	if(!ret.f)
 		return false;
 
-	size_t npages = (ret.s + PAGE_SIZE - 1) / PAGE_SIZE;
-	if(page >= npages) {
-		delete [] ret.f;
-		return false;
-	}
-
-	if(page == npages-1)
-		memset(data, 0, PAGE_SIZE);
-
-	size_t start = page * PAGE_SIZE;
-	if(start < ret.s)
-		memcpy(data, ret.f+start, std::min(ret.s - start, (size_t)PAGE_SIZE));
-
-	delete [] ret.f;
-	return true;
+	return (ret.s + PAGE_SIZE - 1) / PAGE_SIZE;
 }
 
-bool pubRead(std::PID client, size_t page) {
-	uint8_t* data = std::sm::get(client);
-	if(!data)
+bool pubList(std::PID client, std::SMID smid) {
+	auto link = std::sm::link(client, smid);
+	size_t npages = link.s;
+	if(!npages)
 		return false;
+	uint8_t* buffer = link.f;
 
 	selectedLock.acquire();
 	if(!selected.has(client)) {
 		selectedLock.release();
+		std::sm::unlink(smid);
+		return false;
+	}
+	auto sel = selected[client];
+	selectedLock.release();
+
+	FileList files;
+	if(!list(sel.f, sel.s.inode, files)) {
+		std::sm::unlink(smid);
+		return false;
+	}
+
+	auto ret = marshalledList(sel.f, sel.s.inode);
+	if(!ret.f) {
+		std::sm::unlink(smid);
+		return false;
+	}
+
+	memcpy(buffer, ret.f, std::min(ret.s, npages * PAGE_SIZE));
+
+	delete [] ret.f;
+	std::sm::unlink(smid);
+	return true;
+}
+
+bool pubRead(std::PID client, std::SMID smid, size_t page) {
+	auto link = std::sm::link(client, smid);
+	size_t npages = link.s;
+	if(!npages)
+		return false;
+	uint8_t* buffer = link.f;
+
+	selectedLock.acquire();
+	if(!selected.has(client)) {
+		selectedLock.release();
+		std::sm::unlink(smid);
 		return false;
 	}
 	auto sel = selected[client];
@@ -94,17 +118,22 @@ bool pubRead(std::PID client, size_t page) {
 
 	// TODO: check permissions
 
-	return read(sel.f, sel.s.inode, data, page);
+	auto ret = read(sel.f, sel.s.inode, buffer, page);
+	std::sm::unlink(smid);
+	return ret;
 }
 
-bool pubInfo(std::PID client) {
-	uint8_t* data = std::sm::get(client);
-	if(!data)
+bool pubInfo(std::PID client, std::SMID smid) {
+	auto link = std::sm::link(client, smid);
+	size_t npages = link.s;
+	if(!npages)
 		return false;
+	uint8_t* buffer = link.f;
 
 	selectedLock.acquire();
 	if(!selected.has(client)) {
 		selectedLock.release();
+		std::sm::unlink(smid);
 		return false;
 	}
 	auto sel = selected[client];
@@ -115,18 +144,18 @@ bool pubInfo(std::PID client) {
 	std::VFS::Info info;
 	info.size = sel.s.size;
 	info.isDirectory = sel.s.isDirectory;
-	memcpy(data, &info, sizeof(info));
+	memcpy(buffer, &info, sizeof(info));
+	std::sm::unlink(smid);
 	return true;
 }
 
 void publish() {
-	std::exportProcedure((void*)connect, 1);
-	std::exportProcedure((void*)select, 1);
+	std::exportProcedure((void*)select, 2);
+	std::exportProcedure((void*)pubListSize, 0);
 	std::exportProcedure((void*)pubList, 1);
-	std::exportProcedure((void*)pubRead, 1);
-	std::exportProcedure((void*)pubInfo, 0);
+	std::exportProcedure((void*)pubRead, 2);
+	std::exportProcedure((void*)pubInfo, 1);
 	// Write, makeFile, makeDir
 	std::enableRPC();
 	std::publish("VFS");
-	std::halt();
 }
