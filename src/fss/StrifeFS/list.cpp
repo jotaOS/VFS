@@ -17,7 +17,7 @@ std::unordered_map<std::string, File> StrifeFS::list(Inode inode) {
 
 	auto* theInode = (SStructs::Inode*)buffer;
 	size_t sz = theInode->size;
-	size_t npages = (sz + PAGE_SIZE - 1) / PAGE_SIZE;
+	size_t npages = NPAGES(sz);
 
 	std::munmap(buffer);
 	std::smDrop(smid);

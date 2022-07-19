@@ -5,7 +5,7 @@
 #include <shared_memory>
 
 bool StrifeFS::write(Inode inode, size_t start, uint8_t* data, size_t sz) {
-	size_t npages = (sz + PAGE_SIZE - 1) / PAGE_SIZE;
+	size_t npages = NPAGES(sz);
 
 	std::SMID smid = std::smMake(npages);
 	uint8_t* buffer = (uint8_t*)std::smMap(smid);

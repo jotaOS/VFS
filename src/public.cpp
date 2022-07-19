@@ -62,7 +62,7 @@ size_t pubListSize(std::PID client) {
 	if(!ret.f)
 		return false;
 
-	return (ret.s + PAGE_SIZE - 1) / PAGE_SIZE;
+	return NPAGES(ret.s);
 }
 
 bool pubList(std::PID client, std::SMID smid) {
