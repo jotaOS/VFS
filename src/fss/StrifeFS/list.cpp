@@ -9,7 +9,7 @@ std::unordered_map<std::string, File> StrifeFS::list(Inode inode) {
 	uint8_t* buffer = (uint8_t*)std::smMap(smid);
 	std::smAllow(smid, pid);
 
-	if(!std::rpc(pid, std::StrifeFS::GET_INODE, inode)) {
+	if(!std::rpc(pid, std::StrifeFS::GET_INODE, smid, inode)) {
 		std::munmap(buffer);
 		std::smDrop(smid);
 		return {};
@@ -26,7 +26,7 @@ std::unordered_map<std::string, File> StrifeFS::list(Inode inode) {
 	buffer = (uint8_t*)std::smMap(smid);
 	std::smAllow(smid, pid);
 
-	if(!std::rpc(pid, std::StrifeFS::READ, inode, 0, sz)) {
+	if(!std::rpc(pid, std::StrifeFS::READ, smid, inode, 0, sz)) {
 		std::munmap(buffer, npages);
 		std::smDrop(smid);
 		return {};

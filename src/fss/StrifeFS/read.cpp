@@ -9,7 +9,7 @@ size_t StrifeFS::read(Inode inode, uint8_t* data, size_t page) {
 	uint8_t* buffer = (uint8_t*)std::smMap(smid);
 	std::smAllow(smid, pid);
 
-	if(!std::rpc(pid, std::StrifeFS::GET_INODE, inode)) {
+	if(!std::rpc(pid, std::StrifeFS::GET_INODE, smid, inode)) {
 		std::munmap(buffer);
 		std::smDrop(smid);
 		return 0;

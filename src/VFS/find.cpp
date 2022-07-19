@@ -4,9 +4,12 @@
 #include <fss/StrifeFS/StrifeFS.hpp>
 #include "VFS.hpp"
 #include <set>
+#include <fs>
 
 std::pair<Mountpoint, File> find(const std::string& origpath) {
-	std::string path = simplify(origpath);
+	std::string path = std::simplifyPath(origpath);
+	if(!path.size())
+		return {0, {}};
 
 	// Look through all mountpoints, find best match
 	std::string mpPath;

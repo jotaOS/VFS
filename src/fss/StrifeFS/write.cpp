@@ -12,7 +12,7 @@ bool StrifeFS::write(Inode inode, size_t start, uint8_t* data, size_t sz) {
 	std::smAllow(smid, pid);
 	memcpy(buffer, data, sz);
 
-	auto ret = std::rpc(pid, std::StrifeFS::WRITE, inode, start, sz);
+	auto ret = std::rpc(pid, std::StrifeFS::WRITE, smid, inode, start, sz);
 
 	std::munmap(buffer, npages);
 	std::smDrop(smid);

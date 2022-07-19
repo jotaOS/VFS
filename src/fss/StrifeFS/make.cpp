@@ -29,7 +29,7 @@ Inode StrifeFS::makeDir(Inode parent, std::string& name) {
 	std::smAllow(smid, pid);
 
 	memcpy(buffer, name.c_str(), name.size());
-	auto ret = std::rpc(pid, std::StrifeFS::MAKE_DIR, parent, name.size());
+	auto ret = std::rpc(pid, std::StrifeFS::MAKE_DIR, smid, parent, name.size());
 
 	std::munmap(buffer);
 	std::smDrop(smid);

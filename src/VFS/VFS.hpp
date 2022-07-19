@@ -7,7 +7,6 @@
 #include <fss/abstract.hpp>
 #include <unordered_map>
 
-std::string simplify(const std::string& path);
 std::pair<Mountpoint, File> find(const std::string& path);
 
 typedef std::unordered_map<std::string, size_t> FileList;
