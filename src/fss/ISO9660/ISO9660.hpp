@@ -29,7 +29,7 @@ public:
 
 	inline Inode getRoot() const { return root; }
 	std::unordered_map<std::string, File> list(Inode inode);
-	bool read(Inode inode, uint8_t* data, size_t page);
+	bool read(Inode inode, uint8_t* data, size_t page, size_t n);
 
 	File find(const std::string& path);
 };

@@ -92,7 +92,7 @@ bool pubList(std::PID client, std::SMID smid) {
 	return true;
 }
 
-bool pubRead(std::PID client, std::SMID smid, size_t page) {
+bool pubRead(std::PID client, std::SMID smid, size_t start, size_t sz) {
 	auto link = std::sm::link(client, smid);
 	size_t npages = link.s;
 	if(!npages)
@@ -110,7 +110,7 @@ bool pubRead(std::PID client, std::SMID smid, size_t page) {
 
 	// TODO: check permissions
 
-	auto ret = read(sel.f, sel.s.inode, buffer, page);
+	auto ret = read(sel.f, sel.s.inode, buffer, start, sz);
 	std::sm::unlink(smid);
 	return ret;
 }
@@ -134,6 +134,7 @@ bool pubInfo(std::PID client, std::SMID smid) {
 	// TODO: check permissions
 
 	std::VFS::Info info;
+	info.error = std::VFS::OK;
 	info.size = sel.s.size;
 	info.isDirectory = sel.s.isDirectory;
 	memcpy(buffer, &info, sizeof(info));
@@ -166,14 +167,68 @@ size_t pubMkdir(std::PID client, std::SMID smid) {
 	// TODO: check permissions
 }
 
+size_t pubMkfile(std::PID client, std::SMID smid) {
+	auto link = std::sm::link(client, smid);
+	size_t npages = link.s;
+	if(!npages)
+		return std::VFS::CONNECT_ERROR;
+	uint8_t* buffer = link.f;
+	buffer[PAGE_SIZE-1] = 0;
+	std::string name((char*)buffer);
+	std::sm::unlink(smid);
+
+	selectedLock.acquire();
+	if(!selected.has(client)) {
+		selectedLock.release();
+		return false;
+	}
+	auto sel = selected[client];
+	selectedLock.release();
+
+	if(!sel.s.isDirectory)
+		return std::VFS::NOT_A_DIRECTORY;
+
+	return mkfile(sel.f, sel.s.inode, name);
+	// TODO: check permissions
+}
+
+size_t pubWrite(std::PID client, std::SMID smid, size_t start, size_t sz) {
+	auto link = std::sm::link(client, smid);
+	size_t npages = link.s;
+	if(!npages)
+		return std::VFS::CONNECT_ERROR;
+	uint8_t* buffer = link.f;
+
+	selectedLock.acquire();
+	if(!selected.has(client)) {
+		selectedLock.release();
+		std::sm::unlink(smid);
+		return std::VFS::CONNECT_ERROR;
+	}
+	auto sel = selected[client];
+	selectedLock.release();
+
+	// TODO: check permissions
+
+	if(npages < NPAGES(sz)) {
+		std::sm::unlink(smid);
+		return std::VFS::CONNECT_ERROR;
+	}
+
+	auto ret = write(sel.f, sel.s.inode, buffer, start, sz);
+	std::sm::unlink(smid);
+	return ret;
+}
+
 void publish() {
 	std::exportProcedure((void*)select, 1);
 	std::exportProcedure((void*)pubListSize, 0);
 	std::exportProcedure((void*)pubList, 1);
-	std::exportProcedure((void*)pubRead, 2);
+	std::exportProcedure((void*)pubRead, 3);
+	std::exportProcedure((void*)pubWrite, 3);
 	std::exportProcedure((void*)pubInfo, 1);
 	std::exportProcedure((void*)pubMkdir, 1);
-	// Write, makeFile
+	std::exportProcedure((void*)pubMkfile, 1);
 	std::enableRPC();
 	std::publish("VFS");
 }
