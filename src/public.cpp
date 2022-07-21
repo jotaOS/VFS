@@ -5,27 +5,19 @@
 #include <VFS/VFS.hpp>
 #include <shared_memory>
 #include <rpc>
-#include <userspace/VFS.hpp>
+#include <fs>
 
 typedef std::pair<Mountpoint, File> Mpf; // Mountpoint + Inode
 
 std::unordered_map<std::PID, Mpf> selected;
 std::mutex selectedLock;
-size_t select(std::PID client, std::SMID smid, size_t sz) {
-	if(sz >= PAGE_SIZE)
-		return std::VFS::SELECT_CONNECT_ERROR;
-
+size_t select(std::PID client, std::SMID smid) {
 	auto link = std::sm::link(client, smid);
 	size_t npages = link.s;
 	if(!npages)
-		return std::VFS::SELECT_CONNECT_ERROR;
+		return std::VFS::CONNECT_ERROR;
 	uint8_t* buffer = link.f;
-
-	if(sz >= npages * PAGE_SIZE) {
-		std::sm::unlink(smid);
-		return std::VFS::SELECT_CONNECT_ERROR;
-	}
-	buffer[sz] = 0;
+	buffer[PAGE_SIZE-1] = 0;
 	std::string name((char*)buffer);
 	std::sm::unlink(smid);
 
@@ -37,12 +29,12 @@ size_t select(std::PID client, std::SMID smid, size_t sz) {
 	// return 2;
 
 	if(!i)
-		return std::VFS::SELECT_NOT_FOUND;
+		return std::VFS::NOT_FOUND;
 
 	selectedLock.acquire();
 	selected[client] = {mp, found.s};
 	selectedLock.release();
-	return std::VFS::SELECT_OK;
+	return std::VFS::OK;
 }
 
 size_t pubListSize(std::PID client) {
@@ -149,13 +141,39 @@ bool pubInfo(std::PID client, std::SMID smid) {
 	return true;
 }
 
+size_t pubMkdir(std::PID client, std::SMID smid) {
+	auto link = std::sm::link(client, smid);
+	size_t npages = link.s;
+	if(!npages)
+		return std::VFS::CONNECT_ERROR;
+	uint8_t* buffer = link.f;
+	buffer[PAGE_SIZE-1] = 0;
+	std::string name((char*)buffer);
+	std::sm::unlink(smid);
+
+	selectedLock.acquire();
+	if(!selected.has(client)) {
+		selectedLock.release();
+		return false;
+	}
+	auto sel = selected[client];
+	selectedLock.release();
+
+	if(!sel.s.isDirectory)
+		return std::VFS::NOT_A_DIRECTORY;
+
+	return mkdir(sel.f, sel.s.inode, name);
+	// TODO: check permissions
+}
+
 void publish() {
-	std::exportProcedure((void*)select, 2);
+	std::exportProcedure((void*)select, 1);
 	std::exportProcedure((void*)pubListSize, 0);
 	std::exportProcedure((void*)pubList, 1);
 	std::exportProcedure((void*)pubRead, 2);
 	std::exportProcedure((void*)pubInfo, 1);
-	// Write, makeFile, makeDir
+	std::exportProcedure((void*)pubMkdir, 1);
+	// Write, makeFile
 	std::enableRPC();
 	std::publish("VFS");
 }

@@ -15,4 +15,6 @@ std::pair<uint8_t*, size_t> marshalledList(Mountpoint, Inode);
 
 bool read(Mountpoint mp, Inode i, uint8_t* data, size_t page);
 
+size_t mkdir(Mountpoint mp, Inode i, std::string& name);
+
 #endif
