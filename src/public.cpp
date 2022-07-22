@@ -6,11 +6,13 @@
 #include <shared_memory>
 #include <rpc>
 #include <fs>
+#include <users>
 
 typedef std::pair<Mountpoint, File> Mpf; // Mountpoint + Inode
 
 std::unordered_map<std::PID, Mpf> selected;
 std::unordered_map<std::PID, std::string> selectedPath; // Rarely used
+std::unordered_map<std::PID, std::ACLEntry> selectedACL;
 std::mutex selectedLock;
 size_t select(std::PID client, std::SMID smid) {
 	auto link = std::sm::link(client, smid);
@@ -26,15 +28,17 @@ size_t select(std::PID client, std::SMID smid) {
 	auto mp = found.f;
 	auto i = found.s.inode;
 
-	// TODO: check permissions of parent (can read?)
-	// return 2;
-
 	if(!i)
 		return std::VFS::NOT_FOUND;
 
+	std::ACLEntry acl = getEACL(name)[std::PIDtoUID(client)];
+	if(!acl.read)
+		return std::VFS::NOT_ALLOWED;
+
 	selectedLock.acquire();
-	selectedPath[client] = std::simplifyPath(name);
 	selected[client] = {mp, found.s};
+	selectedPath[client] = std::simplifyPath(name);
+	selectedACL[client] = acl;
 	selectedLock.release();
 	return std::VFS::OK;
 }
@@ -112,8 +116,6 @@ bool pubRead(std::PID client, std::SMID smid, size_t start, size_t sz) {
 	auto sel = selected[client];
 	selectedLock.release();
 
-	// TODO: check permissions
-
 	auto ret = read(sel.f, sel.s.inode, buffer, start, sz);
 	std::sm::unlink(smid);
 	return ret;
@@ -134,8 +136,6 @@ bool pubInfo(std::PID client, std::SMID smid) {
 	}
 	auto sel = selected[client];
 	selectedLock.release();
-
-	// TODO: check permissions
 
 	std::VFS::Info info;
 	info.error = std::VFS::OK;
@@ -162,13 +162,15 @@ size_t pubMkdir(std::PID client, std::SMID smid) {
 		return false;
 	}
 	auto sel = selected[client];
+	auto acl = selectedACL[client];
 	selectedLock.release();
 
+	if(!acl.write)
+		return std::VFS::NOT_ALLOWED;
 	if(!sel.s.isDirectory)
 		return std::VFS::NOT_A_DIRECTORY;
 
 	return mkdir(sel.f, sel.s.inode, name);
-	// TODO: check permissions
 }
 
 size_t pubMkfile(std::PID client, std::SMID smid) {
@@ -187,13 +189,15 @@ size_t pubMkfile(std::PID client, std::SMID smid) {
 		return false;
 	}
 	auto sel = selected[client];
+	auto acl = selectedACL[client];
 	selectedLock.release();
 
+	if(!acl.write)
+		return std::VFS::NOT_ALLOWED;
 	if(!sel.s.isDirectory)
 		return std::VFS::NOT_A_DIRECTORY;
 
 	return mkfile(sel.f, sel.s.inode, name);
-	// TODO: check permissions
 }
 
 size_t pubWrite(std::PID client, std::SMID smid, size_t start, size_t sz) {
@@ -210,9 +214,11 @@ size_t pubWrite(std::PID client, std::SMID smid, size_t start, size_t sz) {
 		return std::VFS::CONNECT_ERROR;
 	}
 	auto sel = selected[client];
+	auto acl = selectedACL[client];
 	selectedLock.release();
 
-	// TODO: check permissions
+	if(!acl.write)
+		return std::VFS::NOT_ALLOWED;
 
 	if(npages < NPAGES(sz)) {
 		std::sm::unlink(smid);
@@ -223,7 +229,7 @@ size_t pubWrite(std::PID client, std::SMID smid, size_t start, size_t sz) {
 	std::sm::unlink(smid);
 	return ret;
 }
-#include <cstdio>
+
 bool pubAddACL(std::PID client, size_t uid, size_t rawentry) {
 	selectedLock.acquire();
 	if(!selected.has(client)) {
@@ -231,7 +237,11 @@ bool pubAddACL(std::PID client, size_t uid, size_t rawentry) {
 		return 0;
 	}
 	auto sel = selected[client];
+	auto acl = selectedACL[client];
 	selectedLock.release();
+
+	if(!acl.write)
+		return false;
 
 	std::ACLEntry entry;
 	entry.raw = rawentry;
