@@ -5,25 +5,11 @@
 #include <shared_memory>
 
 std::unordered_map<std::string, File> StrifeFS::list(Inode inode) {
-	std::SMID smid = std::smMake();
-	uint8_t* buffer = (uint8_t*)std::smMap(smid);
-	std::smAllow(smid, pid);
-
-	if(!std::rpc(pid, std::StrifeFS::GET_INODE, smid, inode)) {
-		std::munmap(buffer);
-		std::smDrop(smid);
-		return {};
-	}
-
-	auto* theInode = (SStructs::Inode*)buffer;
-	size_t sz = theInode->size;
+	size_t sz = readInode(inode).size;
 	size_t npages = NPAGES(sz);
 
-	std::munmap(buffer);
-	std::smDrop(smid);
-
-	smid = std::smMake(npages);
-	buffer = (uint8_t*)std::smMap(smid);
+	std::SMID smid = std::smMake(npages);
+	auto* buffer = (uint8_t*)std::smMap(smid);
 	std::smAllow(smid, pid);
 
 	if(!std::rpc(pid, std::StrifeFS::READ, smid, inode, 0, sz)) {

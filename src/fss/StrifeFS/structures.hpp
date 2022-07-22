@@ -1,6 +1,8 @@
 #ifndef STRIFEFS_STRUCTURES_HPP
 #define STRIFEFS_STRUCTURES_HPP
 
+#include <fs>
+
 // Copypasted from the StrifeFS one
 namespace SStructs {
 	typedef uint64_t LBA;
@@ -38,13 +40,7 @@ namespace SStructs {
 	} __attribute__((packed));
 
 	struct ACLEntry {
-		uint64_t allow : 1;
-		uint64_t isUser : 1;
-		uint64_t read : 1;
-		uint64_t write : 1;
-		uint64_t execute : 1;
-		uint64_t reserved : 59;
-
+		std::ACLEntry e;
 		uint64_t id;
 	} __attribute__((packed));
 }

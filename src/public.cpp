@@ -50,11 +50,13 @@ size_t pubListSize(std::PID client) {
 	if(!list(sel.f, sel.s.inode, files))
 		return false;
 
-	auto ret = marshalledList(sel.f, sel.s.inode);
-	if(!ret.f)
+	auto ms = marshalledList(sel.f, sel.s.inode);
+	if(!ms.f)
 		return false;
+	auto ret = NPAGES(ms.s);
 
-	return NPAGES(ret.s);
+	delete [] ms.f;
+	return ret;
 }
 
 bool pubList(std::PID client, std::SMID smid) {
@@ -220,6 +222,51 @@ size_t pubWrite(std::PID client, std::SMID smid, size_t start, size_t sz) {
 	return ret;
 }
 
+size_t pubGetACLSize(std::PID client) {
+	selectedLock.acquire();
+	if(!selected.has(client)) {
+		selectedLock.release();
+		return 0;
+	}
+	auto sel = selected[client];
+	selectedLock.release();
+
+	auto acl = getACL(sel.f, sel.s.inode);
+	auto ms = marshalledACL(acl);
+	auto ret = ms.s;
+	delete [] ms.f;
+	return ret;
+}
+
+bool pubGetACL(std::PID client, std::SMID smid) {
+	selectedLock.acquire();
+	if(!selected.has(client)) {
+		selectedLock.release();
+		return 0;
+	}
+	auto sel = selected[client];
+	selectedLock.release();
+
+	auto link = std::sm::link(client, smid);
+	size_t npages = link.s;
+	if(!npages)
+		return false;
+	uint8_t* buffer = link.f;
+
+	auto acl = getACL(sel.f, sel.s.inode);
+	auto ms = marshalledACL(acl);
+	if(npages < NPAGES(ms.s)) {
+		delete [] ms.f;
+		std::sm::unlink(smid);
+		return false;
+	}
+
+	memcpy(buffer, ms.f, ms.s);
+	delete [] ms.f;
+	std::sm::unlink(smid);
+	return true;
+}
+
 void publish() {
 	std::exportProcedure((void*)select, 1);
 	std::exportProcedure((void*)pubListSize, 0);
@@ -229,6 +276,8 @@ void publish() {
 	std::exportProcedure((void*)pubInfo, 1);
 	std::exportProcedure((void*)pubMkdir, 1);
 	std::exportProcedure((void*)pubMkfile, 1);
+	std::exportProcedure((void*)pubGetACLSize, 0);
+	std::exportProcedure((void*)pubGetACL, 1);
 	std::enableRPC();
 	std::publish("VFS");
 }

@@ -6,6 +6,7 @@
 #include <pair>
 #include <fss/abstract.hpp>
 #include <unordered_map>
+#include <fs>
 
 std::pair<Mountpoint, File> find(const std::string& path);
 
@@ -18,5 +19,8 @@ size_t write(Mountpoint mp, Inode i, uint8_t* data, size_t start, size_t sz);
 
 size_t mkdir(Mountpoint mp, Inode i, std::string& name);
 size_t mkfile(Mountpoint mp, Inode i, std::string& name);
+
+std::ACL getACL(Mountpoint mp, Inode i);
+std::pair<uint8_t*, size_t> marshalledACL(const std::ACL&);
 
 #endif
