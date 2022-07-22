@@ -1,4 +1,10 @@
 #include "StrifeFS.hpp"
+#include <rpc>
+#include <userspace/StrifeFS.hpp>
+
+bool StrifeFS::addACL(Inode inode, size_t uid, std::ACLEntry entry) {
+	return std::rpc(pid, std::StrifeFS::ADD_ACL, inode, uid, entry.raw);
+}
 
 std::ACL StrifeFS::getACL(Inode inode) {
 	// Get the ACL inode

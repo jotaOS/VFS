@@ -20,7 +20,9 @@ size_t write(Mountpoint mp, Inode i, uint8_t* data, size_t start, size_t sz);
 size_t mkdir(Mountpoint mp, Inode i, std::string& name);
 size_t mkfile(Mountpoint mp, Inode i, std::string& name);
 
+bool addACL(Mountpoint mp, Inode i, size_t uid, std::ACLEntry entry);
 std::ACL getACL(Mountpoint mp, Inode i);
+std::ACL getEACL(const std::string& path);
 std::pair<uint8_t*, size_t> marshalledACL(const std::ACL&);
 
 #endif

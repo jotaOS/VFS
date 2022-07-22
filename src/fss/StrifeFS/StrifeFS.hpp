@@ -28,6 +28,7 @@ public:
 	Inode makeDir(Inode parent, std::string& name);
 	Inode makeFile(Inode parent, std::string& name);
 
+	bool addACL(Inode inode, size_t uid, std::ACLEntry entry);
 	std::ACL getACL(Inode inode);
 };
 

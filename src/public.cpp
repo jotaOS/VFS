@@ -10,6 +10,7 @@
 typedef std::pair<Mountpoint, File> Mpf; // Mountpoint + Inode
 
 std::unordered_map<std::PID, Mpf> selected;
+std::unordered_map<std::PID, std::string> selectedPath; // Rarely used
 std::mutex selectedLock;
 size_t select(std::PID client, std::SMID smid) {
 	auto link = std::sm::link(client, smid);
@@ -32,6 +33,7 @@ size_t select(std::PID client, std::SMID smid) {
 		return std::VFS::NOT_FOUND;
 
 	selectedLock.acquire();
+	selectedPath[client] = std::simplifyPath(name);
 	selected[client] = {mp, found.s};
 	selectedLock.release();
 	return std::VFS::OK;
@@ -221,6 +223,21 @@ size_t pubWrite(std::PID client, std::SMID smid, size_t start, size_t sz) {
 	std::sm::unlink(smid);
 	return ret;
 }
+#include <cstdio>
+bool pubAddACL(std::PID client, size_t uid, size_t rawentry) {
+	selectedLock.acquire();
+	if(!selected.has(client)) {
+		selectedLock.release();
+		return 0;
+	}
+	auto sel = selected[client];
+	selectedLock.release();
+
+	std::ACLEntry entry;
+	entry.raw = rawentry;
+
+	return addACL(sel.f, sel.s.inode, uid, entry);
+}
 
 size_t pubGetACLSize(std::PID client) {
 	selectedLock.acquire();
@@ -242,7 +259,7 @@ bool pubGetACL(std::PID client, std::SMID smid) {
 	selectedLock.acquire();
 	if(!selected.has(client)) {
 		selectedLock.release();
-		return 0;
+		return false;
 	}
 	auto sel = selected[client];
 	selectedLock.release();
@@ -267,6 +284,51 @@ bool pubGetACL(std::PID client, std::SMID smid) {
 	return true;
 }
 
+size_t pubGetEACLSize(std::PID client) {
+	selectedLock.acquire();
+	if(!selected.has(client)) {
+		selectedLock.release();
+		return 0;
+	}
+	auto& sel = selectedPath[client];
+	selectedLock.release();
+
+	auto acl = getEACL(sel);
+	auto ms = marshalledACL(acl);
+	auto ret = ms.s;
+	delete [] ms.f;
+	return ret;
+}
+
+bool pubGetEACL(std::PID client, std::SMID smid) {
+	selectedLock.acquire();
+	if(!selected.has(client)) {
+		selectedLock.release();
+		return false;
+	}
+	auto& sel = selectedPath[client];
+	selectedLock.release();
+
+	auto link = std::sm::link(client, smid);
+	size_t npages = link.s;
+	if(!npages)
+		return false;
+	uint8_t* buffer = link.f;
+
+	auto acl = getEACL(sel);
+	auto ms = marshalledACL(acl);
+	if(npages < NPAGES(ms.s)) {
+		delete [] ms.f;
+		std::sm::unlink(smid);
+		return false;
+	}
+
+	memcpy(buffer, ms.f, ms.s);
+	delete [] ms.f;
+	std::sm::unlink(smid);
+	return true;
+}
+
 void publish() {
 	std::exportProcedure((void*)select, 1);
 	std::exportProcedure((void*)pubListSize, 0);
@@ -276,8 +338,11 @@ void publish() {
 	std::exportProcedure((void*)pubInfo, 1);
 	std::exportProcedure((void*)pubMkdir, 1);
 	std::exportProcedure((void*)pubMkfile, 1);
+	std::exportProcedure((void*)pubAddACL, 2);
 	std::exportProcedure((void*)pubGetACLSize, 0);
 	std::exportProcedure((void*)pubGetACL, 1);
+	std::exportProcedure((void*)pubGetEACLSize, 0);
+	std::exportProcedure((void*)pubGetEACL, 1);
 	std::enableRPC();
 	std::publish("VFS");
 }
